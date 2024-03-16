@@ -5,24 +5,30 @@
 
 struct options {
   bool count_bytes;
+  bool count_lines;
 };
 
 typedef struct options Options;
 
-bool no_opts_set(Options options) { return options.count_bytes; }
+bool nooptsset(Options options) {
+  return options.count_bytes && options.count_lines;
+}
 
-void set_all_opts(Options options) { options.count_bytes = true; }
+void setallopts(Options *options) {
+  options->count_bytes = true;
+  options->count_lines = true;
+}
 
-unsigned long countnbytes(FILE *fp) {
+unsigned long countbytes(FILE *fp) {
   if (fseek(fp, 0, SEEK_END) || ferror(fp)) {
-    perror("Could not get file size.");
+    perror("fseek");
     fclose(fp);
     exit(EXIT_FAILURE);
   }
 
   long bytes = ftell(fp);
   if (bytes == -1L) {
-    perror("Could not get file size.");
+    perror("fseek");
     fclose(fp);
     exit(EXIT_FAILURE);
   }
@@ -30,14 +36,36 @@ unsigned long countnbytes(FILE *fp) {
   return bytes;
 }
 
+unsigned long countlines(FILE *fp) {
+  if (fseek(fp, 0, SEEK_SET) || ferror(fp)) {
+    perror("fseek");
+    fclose(fp);
+    exit(EXIT_FAILURE);
+  }
+
+  int lines = 0;
+  char ch;
+
+  while ((ch = fgetc(fp)) != EOF) {
+    if (ch == '\n') {
+      lines++;
+    }
+  }
+
+  return lines;
+}
+
 int main(int argc, char *argv[]) {
   int opt;
   Options options;
 
-  while ((opt = getopt(argc, argv, "c")) != -1) {
+  while ((opt = getopt(argc, argv, "cl")) != -1) {
     switch (opt) {
     case 'c':
       options.count_bytes = true;
+      break;
+    case 'l':
+      options.count_lines = true;
       break;
     }
   }
@@ -48,8 +76,8 @@ int main(int argc, char *argv[]) {
   }
 
   // Default behaviour is to set on all options (when all are not set)
-  if (no_opts_set(options)) {
-    set_all_opts(options);
+  if (nooptsset(options)) {
+    setallopts(&options);
   }
 
   char *filename = argv[optind];
@@ -60,8 +88,11 @@ int main(int argc, char *argv[]) {
   }
 
   if (options.count_bytes) {
-    unsigned long bytes = countnbytes(fp);
-    printf("%6li ", bytes);
+    printf("%li ", countbytes(fp));
+  }
+
+  if (options.count_lines) {
+    printf("%li ", countlines(fp));
   }
 
   printf("%s\n", filename);
