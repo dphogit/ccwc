@@ -13,7 +13,7 @@ struct options {
 typedef struct options Options;
 
 bool nooptsset(Options options) {
-  return options.count_bytes && options.count_lines && options.count_words;
+  return !options.count_bytes && !options.count_lines && !options.count_words;
 }
 
 void setallopts(Options *options) {
@@ -85,7 +85,7 @@ unsigned long countwords(FILE *fp) {
 
 int main(int argc, char *argv[]) {
   int opt;
-  Options options;
+  Options options = {false, false, false};
 
   while ((opt = getopt(argc, argv, "clw")) != -1) {
     switch (opt) {
