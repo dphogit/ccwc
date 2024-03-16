@@ -1,82 +1,64 @@
 #include <ctype.h>
 #include <locale.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <wchar.h>
 
 struct options {
-  bool count_bytes;
-  bool count_lines;
-  bool count_words;
-  bool count_chars;
+  bool print_bytes;
+  bool print_lines;
+  bool print_words;
+  bool print_chars;
+};
+
+struct wcresult {
+  uintmax_t lines;
+  uintmax_t words;
+  uintmax_t bytes;
 };
 
 typedef struct options Options;
+typedef struct wcresult WCResult;
 
 bool nooptsset(Options options) {
-  return !options.count_bytes && !options.count_lines && !options.count_words &&
-         !options.count_chars;
+  return !options.print_bytes && !options.print_lines && !options.print_words &&
+         !options.print_chars;
 }
 
 void setdefaultopts(Options *options) {
-  options->count_bytes = true;
-  options->count_lines = true;
-  options->count_words = true;
+  options->print_bytes = true;
+  options->print_lines = true;
+  options->print_words = true;
 }
 
-unsigned long countbytes(FILE *fp) {
-  if (fseek(fp, 0, SEEK_END) || ferror(fp)) {
-    perror("fseek");
-    fclose(fp);
+WCResult wc(const char *filename) {
+  FILE *fp = fopen(filename, "rb");
+  if (fp == NULL) {
+    perror("Could not open file");
     exit(EXIT_FAILURE);
   }
 
-  long bytes = ftell(fp);
-  if (bytes == -1L) {
-    perror("fseek");
-    fclose(fp);
-    exit(EXIT_FAILURE);
-  }
+  WCResult result = {.lines = 0, .words = 0, .bytes = 0};
 
-  return bytes;
-}
-
-unsigned long countlines(FILE *fp) {
-  if (fseek(fp, 0, SEEK_SET) || ferror(fp)) {
-    perror("fseek");
-    fclose(fp);
-    exit(EXIT_FAILURE);
-  }
-
-  long lines = 0;
-  char ch;
-
-  while ((ch = fgetc(fp)) != EOF) {
-    if (ch == '\n') {
-      lines++;
-    }
-  }
-
-  return lines;
-}
-
-unsigned long countwords(FILE *fp) {
-  if (fseek(fp, 0, SEEK_SET) || ferror(fp)) {
-    perror("fseek");
-    fclose(fp);
-    exit(EXIT_FAILURE);
-  }
-
-  long words = 0;
   char ch;
   bool in_word;
 
   while ((ch = fgetc(fp)) != EOF) {
+    result.bytes++;
+
+    if (ch == '\n') {
+      result.lines++;
+    }
+
+    // If we detect a space and we are currently in a word, increment word
+    // count. Also check to reset `in_word` when we encounter a new word (next
+    // char is not space and we are not in a word currently)
     if (isspace(ch)) {
       if (in_word) {
-        words++;
+        result.words++;
       }
       in_word = false;
     } else if (!in_word) {
@@ -84,46 +66,46 @@ unsigned long countwords(FILE *fp) {
     }
   }
 
-  return words;
+  fclose(fp);
+  return result;
 }
 
-unsigned long countchars(FILE *fp) {
-  if (fseek(fp, 0, SEEK_SET) || ferror(fp)) {
-    perror("fseek");
-    fclose(fp);
+// A separate function to count characters in a file. Considers wide characters
+// that are larger than a byte, which the main `wc` function does not consider.
+uintmax_t countchars(const char *filename) {
+  FILE *fp = fopen(filename, "rb");
+  if (fp == NULL) {
+    perror("Could not open file");
     exit(EXIT_FAILURE);
   }
-
-  // Use current environment locale's character encoding
-  setlocale(LC_CTYPE, "");
-
-  unsigned long chars = 0;
+  uintmax_t chars = 0;
   wchar_t ch;
 
   while ((ch = fgetwc(fp)) != WEOF) {
     chars++;
   }
 
+  fclose(fp);
   return chars;
 }
 
 int main(int argc, char *argv[]) {
   int opt;
-  Options options = {false, false, false};
+  Options options = {false, false, false, false};
 
   while ((opt = getopt(argc, argv, "lwcm")) != -1) {
     switch (opt) {
     case 'c':
-      options.count_bytes = true;
+      options.print_bytes = true;
       break;
     case 'l':
-      options.count_lines = true;
+      options.print_lines = true;
       break;
     case 'w':
-      options.count_words = true;
+      options.print_words = true;
       break;
     case 'm':
-      options.count_chars = true;
+      options.print_chars = true;
     }
   }
 
@@ -137,28 +119,26 @@ int main(int argc, char *argv[]) {
   }
 
   char *filename = argv[optind];
-  FILE *fp = fopen(filename, "rb");
-  if (fp == NULL) {
-    perror("Could not open file");
-    exit(EXIT_FAILURE);
-  }
 
-  if (options.count_lines) {
-    printf("%li ", countlines(fp));
+  // Use current environment's default locale for character handling functions
+  setlocale(LC_CTYPE, "");
+
+  WCResult result = wc(filename);
+
+  if (options.print_lines) {
+    printf("%ju ", result.lines);
   }
-  if (options.count_words) {
-    printf("%li ", countwords(fp));
+  if (options.print_words) {
+    printf("%ju ", result.words);
   }
-  if (options.count_bytes) {
-    printf("%li ", countbytes(fp));
+  if (options.print_bytes) {
+    printf("%ju ", result.bytes);
   }
-  if (options.count_chars) {
-    printf("%li ", countchars(fp));
+  if (options.print_chars) {
+    printf("%ju ", countchars(filename));
   }
 
   printf("%s\n", filename);
-
-  fclose(fp);
 
   return 0;
 }
