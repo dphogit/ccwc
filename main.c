@@ -1,25 +1,16 @@
-#include <ctype.h>
 #include <locale.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <wchar.h>
-
-const int INIT_BUFSIZE = 1024;
+#include <wctype.h>
 
 struct options {
   bool print_bytes;
   bool print_lines;
   bool print_words;
   bool print_chars;
-};
-
-struct wcresult {
-  uintmax_t lines;
-  uintmax_t words;
-  uintmax_t bytes;
 };
 
 typedef struct options Options;
@@ -66,13 +57,6 @@ int main(int argc, char *argv[]) {
   FILE *stream = NULL;
   char *filename = NULL;
 
-  char *buffer = malloc(sizeof(char) * INIT_BUFSIZE);
-
-  if (buffer == NULL) {
-    fprintf(stderr, "Error allocating memory\n");
-    exit(EXIT_FAILURE);
-  }
-
   // The stream we use to load in the buffer depends on whether a filename is
   // passed or not. If not, we use stdin (e.g. redirection or piped).
   if (optind == argc) {
@@ -86,34 +70,36 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  size_t buffer_size = INIT_BUFSIZE;
   size_t total_bytes = 0;
-  size_t total_lines = 0;
+  size_t total_newlines = 0;
   size_t total_words = 0;
+  size_t total_chars = 0;
 
-  int ch;
+  wint_t wc;
+  char mbbuffer[MB_CUR_MAX]; // Buffer to hold converted multibyte character
   bool in_word;
 
-  // Load the buffer copying each character from stream.
-  while ((ch = fgetc(stream)) != EOF) {
-    // Check if we need to increase buffer size => reallocate with double size
-    if (total_bytes + 1 >= buffer_size) {
-      buffer_size *= 2;
-      buffer = realloc(buffer, buffer_size * sizeof(char));
-      if (buffer == NULL) {
-        fprintf(stderr, "Error reallocating memory\n");
-        free(buffer);
-        exit(EXIT_FAILURE);
-      }
+  // Iterate through each wide character from the stream.
+  // Using wide characters allow us to handle chars that are multibyte.
+  while ((wc = fgetwc(stream)) != WEOF) {
+    total_chars++;
+
+    // Get byte count of character (handles multibyte characters)
+    size_t bytes = wcrtomb(mbbuffer, wc, NULL);
+    if (bytes == (size_t)-1) {
+      fprintf(stderr, "Invalid character sequence: %lc\n", wc);
+      exit(EXIT_FAILURE);
+    }
+    total_bytes += bytes;
+
+    // Line counting
+    if (wc == L'\n') {
+      total_newlines++;
+      in_word = false;
     }
 
-    if (ch == '\n') {
-      total_lines++;
-    }
-
-    // Words are counted through (non) whitespace detection as well as knowing
-    // whether we are currently in the middle of a word or not.
-    if (isspace(ch)) {
+    // Word counting
+    if (iswspace(wc)) {
       if (in_word) {
         total_words++;
       }
@@ -121,28 +107,25 @@ int main(int argc, char *argv[]) {
     } else if (!in_word) {
       in_word = true;
     }
-
-    buffer[total_bytes] = ch;
-    total_bytes++;
   }
-
-  buffer[total_bytes] = '\0';
 
   if (options.print_lines) {
-    printf("%ju ", total_lines);
+    printf("%zu ", total_newlines);
   }
   if (options.print_words) {
-    printf("%ju ", total_words);
+    printf("%zu ", total_words);
   }
   if (options.print_bytes) {
-    printf("%ju ", total_bytes);
+    printf("%zu ", total_bytes);
+  }
+  if (options.print_chars) {
+    printf("%zu ", total_chars);
   }
 
   if (filename != NULL) {
-    printf("%s\n", filename);
+    printf("%s", filename);
   }
-
-  free(buffer);
+  printf("\n");
 
   return 0;
 }
