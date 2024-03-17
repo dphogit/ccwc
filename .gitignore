@@ -1,2 +1,7 @@
-*.out
-*.swp
+**/*.out
+**/*.swp
+**/*.o
+
+bin/
+out/
+

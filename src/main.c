@@ -57,8 +57,9 @@ int main(int argc, char *argv[]) {
   FILE *stream = NULL;
   char *filename = NULL;
 
-  // The stream we use to load in the buffer depends on whether a filename is
-  // passed or not. If not, we use stdin (e.g. redirection or piped).
+  // The stream we use to process depends on whether a filename is
+  // passed or not. If passed we use the file contents, otherwise
+  // we use stdin (e.g. redirection or piped).
   if (optind == argc) {
     stream = stdin;
   } else {
@@ -115,11 +116,11 @@ int main(int argc, char *argv[]) {
   if (options.print_words) {
     printf("%zu ", total_words);
   }
-  if (options.print_bytes) {
-    printf("%zu ", total_bytes);
-  }
   if (options.print_chars) {
     printf("%zu ", total_chars);
+  }
+  if (options.print_bytes) {
+    printf("%zu ", total_bytes);
   }
 
   if (filename != NULL) {
