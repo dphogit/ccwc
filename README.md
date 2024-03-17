@@ -9,9 +9,11 @@ Things I learned:
 - C (File operations, streams, `getopt`, character functions, locales)
 - C tooling (Make/Makefile, clangd, clang-format)
 
-## Usage 
+## Build and Usage
 
-`wc [OPTION]... [FILE]`
+Uses a `Makefile` to build into `bin/ccwc`. Simply run `bash` to create the `ccwc` executable located in `bin`. Then run with: 
+
+`bin/ccwc [OPTION]... [FILE]`
 
 Prints the word, line, character, and byte count for FILE. If no FILE, reads from standard input.
 
