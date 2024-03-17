@@ -34,29 +34,23 @@ void setdefaultopts(Options *options) {
   options->print_words = true;
 }
 
-WCResult wc(const char *filename) {
-  FILE *fp = fopen(filename, "rb");
-  if (fp == NULL) {
-    perror("Could not open file");
-    exit(EXIT_FAILURE);
-  }
-
+WCResult wc(const char *buffer) {
   WCResult result = {.lines = 0, .words = 0, .bytes = 0};
 
-  char ch;
   bool in_word;
+  size_t i = 0;
 
-  while ((ch = fgetc(fp)) != EOF) {
+  while (buffer[i] != '\0') {
     result.bytes++;
 
-    if (ch == '\n') {
+    if (buffer[i] == '\n') {
       result.lines++;
     }
 
     // If we detect a space and we are currently in a word, increment word
     // count. Also check to reset `in_word` when we encounter a new word (next
     // char is not space and we are not in a word currently)
-    if (isspace(ch)) {
+    if (isspace(buffer[i])) {
       if (in_word) {
         result.words++;
       }
@@ -64,14 +58,16 @@ WCResult wc(const char *filename) {
     } else if (!in_word) {
       in_word = true;
     }
+
+    i++;
   }
 
-  fclose(fp);
   return result;
 }
 
 // A separate function to count characters in a file. Considers wide characters
 // that are larger than a byte, which the main `wc` function does not consider.
+// TODO Integrate this with the new buffer implementation when ready.
 uintmax_t countchars(const char *filename) {
   FILE *fp = fopen(filename, "rb");
   if (fp == NULL) {
@@ -109,21 +105,91 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (optind == argc) {
-    fprintf(stderr, "Error: No filename provided\n");
-    exit(EXIT_FAILURE);
-  }
-
+  // Use the default options of lines, words, and byte counts if no option
+  // is explicitly passed.
   if (nooptsset(options)) {
     setdefaultopts(&options);
   }
 
-  char *filename = argv[optind];
+  FILE *pFile = NULL;
+  char *filename = NULL;
+  char *buffer = NULL;
+
+  if (optind == argc) {
+    // No filename provided, read contents of stdin
+    buffer = malloc(sizeof(char) * 1024);
+    if (buffer == NULL) {
+      perror("malloc");
+      exit(EXIT_FAILURE);
+    }
+
+    size_t buffer_size = 1024;
+    size_t bytes_read = 0;
+    int c;
+
+    while ((c = fgetc(stdin)) != EOF) {
+      // Check if buffer needs resizing
+      if (bytes_read + 1 >= buffer_size) {
+        buffer_size *= 2; // double buffer size
+        buffer = realloc(buffer, buffer_size * sizeof(char));
+        if (buffer == NULL) {
+          fprintf(stderr, "Error reallocating memory\n");
+          free(buffer);
+          exit(EXIT_FAILURE);
+        }
+      }
+
+      buffer[bytes_read] = c;
+      bytes_read++;
+    }
+
+    buffer[bytes_read] = '\0';
+  } else {
+    // Filename provided, open the file.
+    filename = argv[optind];
+    pFile = fopen(filename, "rb");
+    if (pFile == NULL) {
+      perror("fopen");
+      exit(EXIT_FAILURE);
+    }
+    // Move file position to end of file so we can get it's size
+    if (fseek(pFile, 0, SEEK_END)) {
+      perror("fseek SEEK_END");
+      exit(EXIT_FAILURE);
+    }
+
+    // Get file size
+    long size = ftell(pFile);
+    if (size == -1L) {
+      perror("ftell");
+      exit(EXIT_FAILURE);
+    }
+
+    // Move file position back to start of file for reading.
+    if (fseek(pFile, 0, SEEK_SET)) {
+      perror("fseek SEEK_SET");
+      exit(EXIT_FAILURE);
+    }
+
+    // Allocate memory for a buffer to contain whole file
+    buffer = (char *)malloc(sizeof(char) * size);
+    if (buffer == NULL) {
+      perror("malloc");
+      exit(EXIT_FAILURE);
+    }
+
+    // Copy file contents into buffer
+    size_t res = fread(buffer, sizeof(char), size, pFile);
+    if (res != size) {
+      fprintf(stderr, "Error reading file\n");
+      exit(EXIT_FAILURE);
+    }
+  }
 
   // Use current environment's default locale for character handling functions
   setlocale(LC_CTYPE, "");
 
-  WCResult result = wc(filename);
+  WCResult result = wc(buffer);
 
   if (options.print_lines) {
     printf("%ju ", result.lines);
@@ -134,11 +200,18 @@ int main(int argc, char *argv[]) {
   if (options.print_bytes) {
     printf("%ju ", result.bytes);
   }
-  if (options.print_chars) {
-    printf("%ju ", countchars(filename));
+
+  // if (options.print_chars) {
+  //   printf("%ju ", countchars(filename));
+  // }
+
+  if (filename == NULL) {
+    printf("\n");
+  } else {
+    printf("%s\n", filename);
   }
 
-  printf("%s\n", filename);
+  free(buffer);
 
   return 0;
 }
