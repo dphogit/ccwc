@@ -11,7 +11,7 @@ Things I learned:
 
 ## Build and Usage
 
-Uses a `Makefile` to build into `bin/ccwc`. Simply run `bash` to create the `ccwc` executable located in `bin`. Then run with: 
+Uses a `Makefile` to build into `bin/ccwc`. Simply run `make` to create the `ccwc` executable located in `bin`. Then run with: 
 
 `bin/ccwc [OPTION]... [FILE]`
 
