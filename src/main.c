@@ -1,14 +1,17 @@
 #include <locale.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <wchar.h>
 #include <wctype.h>
 
+const int MIN_NUMBER_WIDTH = 6;
+
 struct options {
   bool print_bytes;
-  bool print_lines;
+  bool print_newlines;
   bool print_words;
   bool print_chars;
 };
@@ -16,14 +19,35 @@ struct options {
 typedef struct options Options;
 
 bool nooptsset(Options options) {
-  return !options.print_bytes && !options.print_lines && !options.print_words &&
-         !options.print_chars;
+  return !options.print_bytes && !options.print_newlines &&
+         !options.print_words && !options.print_chars;
 }
 
 void setdefaultopts(Options *options) {
   options->print_bytes = true;
-  options->print_lines = true;
+  options->print_newlines = true;
   options->print_words = true;
+}
+
+// Return a suitable width for non-negative integer n for printing the counts.
+// Returns the minimum between number of digits and a predefined minimum.
+int getnumberwidth(uintmax_t n) {
+  if (n < 0) {
+    fprintf(stderr, "Must be non-negative value!");
+  } else if (n == 0) {
+    return 1;
+  }
+
+  int width = 0;
+  while (n > 0) {
+    width++;
+    n /= 10;
+  }
+  return width > MIN_NUMBER_WIDTH ? width : MIN_NUMBER_WIDTH;
+}
+
+void printcount(uintmax_t count) {
+  printf("%*zu ", getnumberwidth(count), count);
 }
 
 int main(int argc, char *argv[]) {
@@ -36,7 +60,7 @@ int main(int argc, char *argv[]) {
       options.print_bytes = true;
       break;
     case 'l':
-      options.print_lines = true;
+      options.print_newlines = true;
       break;
     case 'w':
       options.print_words = true;
@@ -110,17 +134,17 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (options.print_lines) {
-    printf("%zu ", total_newlines);
+  if (options.print_newlines) {
+    printcount(total_newlines);
   }
   if (options.print_words) {
-    printf("%zu ", total_words);
+    printcount(total_words);
   }
   if (options.print_chars) {
-    printf("%zu ", total_chars);
+    printcount(total_chars);
   }
   if (options.print_bytes) {
-    printf("%zu ", total_bytes);
+    printcount(total_bytes);
   }
 
   if (filename != NULL) {
